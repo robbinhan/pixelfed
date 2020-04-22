@@ -52,7 +52,7 @@ class BaseApiController extends Controller
         abort_if(!$request->user(), 403);
         $pid = $request->user()->profile_id;
         $pg = $request->input('pg');
-        if($pg == true) {
+        if ($pg == true) {
             $timeago = Carbon::now()->subMonths(6);
             $notifications = Notification::whereProfileId($pid)
                 ->whereDate('created_at', '>', $timeago)
@@ -126,25 +126,25 @@ class BaseApiController extends Controller
         $only_media = $request->only_media ?? false;
         $user = Auth::user();
         $account = Profile::whereNull('status')->findOrFail($id);
-        $statuses = $account->statuses()->getQuery(); 
-        if($only_media == true) {
+        $statuses = $account->statuses()->getQuery();
+        if ($only_media == true) {
             $statuses = $statuses
                 ->whereHas('media')
                 ->whereNull('in_reply_to_id')
                 ->whereNull('reblog_of_id');
         }
-        if($id == $account->id && !$max_id && !$min_id && !$since_id) {
+        if ($id == $account->id && !$max_id && !$min_id && !$since_id) {
             $statuses = $statuses->orderBy('id', 'desc')
                 ->paginate($limit);
-        } else if($since_id) {
+        } else if ($since_id) {
             $statuses = $statuses->where('id', '>', $since_id)
                 ->orderBy('id', 'DESC')
                 ->paginate($limit);
-        } else if($min_id) {
+        } else if ($min_id) {
             $statuses = $statuses->where('id', '>', $min_id)
                 ->orderBy('id', 'ASC')
                 ->paginate($limit);
-        } else if($max_id) {
+        } else if ($max_id) {
             $statuses = $statuses->where('id', '<', $max_id)
                 ->orderBy('id', 'DESC')
                 ->paginate($limit);
@@ -161,7 +161,7 @@ class BaseApiController extends Controller
     {
         abort_if(!$request->user(), 403);
         $this->validate($request, [
-            'upload'   => 'required|mimes:jpeg,png,gif|max:'.config('pixelfed.max_avatar_size'),
+            'upload'   => 'required|mimes:jpeg,png,gif|max:' . config('pixelfed.max_avatar_size'),
         ]);
 
         try {
@@ -172,7 +172,7 @@ class BaseApiController extends Controller
             $dir = $path['root'];
             $name = $path['name'];
             $public = $path['storage'];
-            $currentAvatar = storage_path('app/'.$profile->avatar->media_path);
+            $currentAvatar = storage_path('app/' . $profile->avatar->media_path);
             $loc = $request->file('upload')->storeAs($public, $name);
 
             $avatar = Avatar::whereProfileId($profile->id)->firstOrFail();
@@ -197,10 +197,10 @@ class BaseApiController extends Controller
     public function showTempMedia(Request $request, $profileId, $mediaId, $timestamp)
     {
         abort_if(!$request->user(), 403);
-        abort_if(!$request->hasValidSignature(), 404); 
-        abort_if(Auth::user()->profile_id != $profileId, 404); 
+        abort_if(!$request->hasValidSignature(), 404);
+        abort_if(Auth::user()->profile_id != $profileId, 404);
         $media = Media::whereProfileId(Auth::user()->profile_id)->findOrFail($mediaId);
-        $path = storage_path('app/'.$media->media_path);
+        $path = storage_path('app/' . $media->media_path);
         return response()->file($path);
     }
 
@@ -208,62 +208,72 @@ class BaseApiController extends Controller
     {
         abort_if(!$request->user(), 403);
         $this->validate($request, [
-              'file.*'      => function() {
+            'file.*'      => function () {
                 return [
                     'required',
                     'mimes:' . config('pixelfed.media_types'),
                     'max:' . config('pixelfed.max_photo_size'),
                 ];
-              },
-              'filter_name' => 'nullable|string|max:24',
-              'filter_class' => 'nullable|alpha_dash|max:24'
+            },
+            'filter_name' => 'nullable|string|max:24',
+            'filter_class' => 'nullable|alpha_dash|max:24'
         ]);
 
         $user = Auth::user();
         $profile = $user->profile;
 
-        if(config('pixelfed.enforce_account_limit') == true) {
-            $size = Cache::remember($user->storageUsedKey(), now()->addDays(3), function() use($user) {
+        if (config('pixelfed.enforce_account_limit') == true) {
+            $size = Cache::remember($user->storageUsedKey(), now()->addDays(3), function () use ($user) {
                 return Media::whereUserId($user->id)->sum('size') / 1000;
-            }); 
+            });
             $limit = (int) config('pixelfed.max_account_size');
             if ($size >= $limit) {
-               abort(403, 'Account size limit reached.');
+                abort(403, 'Account size limit reached.');
             }
         }
 
         $filterClass = in_array($request->input('filter_class'), Filter::classes()) ? $request->input('filter_class') : null;
         $filterName = in_array($request->input('filter_name'), Filter::names()) ? $request->input('filter_name') : null;
 
-        $monthHash = hash('sha1', date('Y').date('m'));
+        $monthHash = hash('sha1', date('Y') . date('m'));
         $userHash = hash('sha1', $user->id . (string) $user->created_at);
 
         $photo = $request->file('file');
 
         $mimes = explode(',', config('pixelfed.media_types'));
-        if(in_array($photo->getMimeType(), $mimes) == false) {
+        if (in_array($photo->getMimeType(), $mimes) == false) {
             return;
         }
 
-        $storagePath = "public/m/{$monthHash}/{$userHash}";
-        $path = $photo->store($storagePath);
-        $hash = \hash_file('sha256', $photo);
+        $storagePath = "{$monthHash}_{$userHash}";
+        $hash = $photo->store($storagePath, 'swarm');
+        // var_dump('path', $hash);
+        // $hash = \hash_file('sha256', $photo);
+
+        $url = config('filesystems.disks.swarm.gateway') . $hash . '/' . $storagePath;
 
         $media = new Media();
         $media->status_id = null;
         $media->profile_id = $profile->id;
         $media->user_id = $user->id;
-        $media->media_path = $path;
+        $media->media_path = $hash . '/' . $storagePath;
         $media->original_sha256 = $hash;
         $media->size = $photo->getSize();
         $media->mime = $photo->getMimeType();
         $media->filter_class = $filterClass;
         $media->filter_name = $filterName;
+        $media->remote_media = 1;
+        $media->remote_url = $url;
         $media->save();
 
-        $url = URL::temporarySignedRoute(
-            'temp-media', now()->addHours(1), ['profileId' => $profile->id, 'mediaId' => $media->id, 'timestamp' => time()]
-        );
+        // $url = URL::temporarySignedRoute(
+        //     'temp-media',
+        //     now()->addHours(1),
+        //     ['profileId' => $profile->id, 'mediaId' => $media->id, 'timestamp' => time()]
+        // );
+
+        // var_dump(config('filesystems.disks.swarm.gateway'));
+
 
         switch ($media->mime) {
             case 'image/jpeg':
@@ -276,7 +286,7 @@ class BaseApiController extends Controller
                 $preview_url = '/storage/no-preview.png';
                 $url = '/storage/no-preview.png';
                 break;
-            
+
             default:
                 break;
         }
@@ -314,7 +324,7 @@ class BaseApiController extends Controller
     {
         $user = $request->user();
         abort_if(!$user, 403);
-        if($user->status != null) {
+        if ($user->status != null) {
             Auth::logout();
             return redirect('/login');
         }
@@ -335,6 +345,6 @@ class BaseApiController extends Controller
             ->get();
         $resource = new Fractal\Resource\Collection($medias, new MediaDraftTransformer());
         $res = $this->fractal->createData($resource)->toArray();
-        return response()->json($res, 200, [], JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES);
+        return response()->json($res, 200, [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
 }

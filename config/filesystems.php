@@ -51,7 +51,7 @@ return [
         'public' => [
             'driver'     => 'local',
             'root'       => storage_path('app/public'),
-            'url'        => env('APP_URL').'/storage',
+            'url'        => env('APP_URL') . '/storage',
             'visibility' => 'public',
         ],
 
@@ -66,6 +66,11 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
         ],
 
+        'swarm' => [
+            "driver" => "swarm",
+            "gateway" => "https://swarm-gateways.net/bzz:/"
+        ],
+
         'spaces' => [
             'driver' => 's3',
             'key' => env('DO_SPACES_KEY'),
@@ -77,8 +82,8 @@ return [
             'options' => [
                 'CacheControl' => 'max-age=31536000'
             ],
-            'root' => env('DO_SPACES_ROOT','/'),
-            'url' => str_replace(env('DO_SPACES_REGION'),env('DO_SPACES_BUCKET').'.'.env('DO_SPACES_REGION'),str_replace("digitaloceanspaces","cdn.digitaloceanspaces",env('DO_SPACES_ENDPOINT'))),
+            'root' => env('DO_SPACES_ROOT', '/'),
+            'url' => str_replace(env('DO_SPACES_REGION'), env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION'), str_replace("digitaloceanspaces", "cdn.digitaloceanspaces", env('DO_SPACES_ENDPOINT'))),
         ],
 
     ],
